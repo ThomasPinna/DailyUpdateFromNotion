@@ -41,9 +41,14 @@ For this script to work, you need a task table,
 
 - In the script, change your user id
 
+- In the scrip change your table url to the url of your task table
+
 ## Todo
 
-- mark items that where done yesterday as done after posting
-- Make it easier to support other tables structures
-- Make it easier to define the user id (environment variable or parameter)
-- Make the package installable 
+- [ ] Mark items that where done yesterday as done after posting
+- [ ] Make the following things parameters of the script (or environment variables)
+  - [ ] user id
+  - [ ] table url
+- [ ] Make it easier to support other Status fields (and support a variable amount of them)
+- [ ] Make user filtering and archived filtering optional
+- [ ] Make the package pip installable
