@@ -1,4 +1,14 @@
-from notion.collection import _normalize_property_name, _normalize_query_list, QUERY_RESULT_TYPES, QueryResult, get_localzone
+
+# start with some workaround
+
+from notion.collection import (
+    _normalize_property_name,
+    _normalize_query_list,
+    QUERY_RESULT_TYPES,
+    QueryResult,
+    get_localzone,
+)
+
 
 def new_init(
     self,
@@ -25,6 +35,7 @@ def new_init(
     self.group_by = _normalize_property_name(group_by, collection)
     self._client = collection._client
 
+
 def new_execute(self):
 
     result_class = QUERY_RESULT_TYPES.get(self.type, QueryResult)
@@ -43,6 +54,7 @@ def new_execute(self):
             group_by=self.group_by,
         ),
     )
+
 
 def new_call_query_collection(
     self,
@@ -74,11 +86,7 @@ def new_call_query_collection(
             "userTimeZone": str(get_localzone()),
             "type": type,
         },
-        "query": {
-            "aggregate": aggregate,
-            "filter": filter,
-            "sort": sort,
-        },
+        "query": {"aggregate": aggregate, "filter": filter, "sort": sort,},
     }
 
     response = self._client.post("queryCollection", data).json()
@@ -87,20 +95,18 @@ def new_call_query_collection(
 
     return response["result"]
 
+
 from notion.collection import CollectionQuery
 from notion.store import RecordStore
+
 CollectionQuery.__init__ = new_init
 CollectionQuery.execute = new_execute
 RecordStore.call_query_collection = new_call_query_collection
 
 
-
-# Tools to help use notion
-
 from notion.client import NotionClient
-import time
 import slack
-import os
+import click
 
 # requires environment variables:
 #   notion_key
@@ -111,142 +117,158 @@ import os
 # to change how it is represented or split up, edit string_format
 # to change how it is shown in slack, edit message_to_slack_blocks
 
-def main_process(user_id, channel):
+
+@click.command()
+@click.option(
+    "--user", envvar="du_user_id", required=True, help="Your notion user id",
+)
+@click.option(
+    "--channel",
+    envvar="du_slack_channel",
+    required=True,
+    help="The slack channel where the message should be posted (without #)",
+)
+@click.option(
+    "--notion-table",
+    envvar="du_notion_table",
+    required=True,
+    help="The notion table containing the tasks",
+)
+@click.option(
+    "--slack-key",
+    envvar="du_slack_key",
+    required=True,
+    help="A slack authentication key",
+)
+@click.option(
+    "--notion-key",
+    envvar="du_notion_key",
+    required=True,
+    help="The notion authentication key)",
+)
+def main_process(user, channel, notion_table, slack_key, notion_key):
     # connect with notion
-    cv = connect_with_notion()
-    print('connected to notion')
-    print(cv)
+    cv = connect_with_notion(notion_key, notion_table)
+    print("connected to notion")
     # retrieve tasks that are active and assigned to user_id
-    active_tasks = query_active_tasks_assigned_to(cv=cv, user_id=user_id)
-    print('got relevant tasks')
-    print(active_tasks)
+    active_tasks = query_active_tasks_assigned_to(cv=cv, user_id=user)
+    print("got relevant tasks")
     # build the message for slack
     in_progress, done_yesterday = string_format(active_tasks)
-    print(in_progress, done_yesterday)
     slack_blocks = message_to_slack_blocks(done_yesterday, in_progress)
-    print('tasks preprocessed')
+    print("formatted message")
     # send to slack
-    push_blocks_to_slack(channel, slack_blocks)
-    print('tasks posted on slack')
+    push_blocks_to_slack(slack_key, channel, slack_blocks)
+    print("tasks posted on slack")
 
 
-def connect_with_notion():
+def connect_with_notion(notion_key, notion_table):
     # connect with notion tasks database
-    client = NotionClient(token_v2=os.environ['notion_key'], monitor=False)
-    return client.get_collection_view("https://www.notion.so/mycellhub/2c9112bb9586478fbba2f1e1eba15c9e?v=557b0e9d6bc743fb84733628d7cfa6c2")
+    client = NotionClient(token_v2=notion_key, monitor=False)
+    return client.get_collection_view(notion_table)
 
 
 def query_active_tasks_assigned_to(cv, user_id):
-    old_filter_params = [{  
-        "id": "e779be32-a7a1-456d-9ad3-aba869b5fbd3",
-        "value":{ 
-            "type":"exact",
-            "value":{ 
-                "id":user_id,
-                "table":"notion_user"
-            }
-        },
-        "operator":"person_contains",
-        "property":"L}(O",
-        "value_type":"person"
-    },{
-        "id":"b6963c9a-4350-4cfc-92b7-27a4ad2c08e8",
-        "type":"checkbox",
-        "value":{"type": "exact", "value": False},
-        "property":"X*]x",
-        "comparator":"checkbox_is"
-    }]
-
-
-    filter_params =  {
-        "filters":[ 
-            { 
-                "filter":{ 
-                    "value":{ 
-                        "type":"exact",
-                        "value":{ 
-                            "id":user_id,
-                            "table":"notion_user"
-                        }
-                    },
-                    "operator":"person_contains"
-                },
-                "property":"L}(O"
+    old_filter_params = [
+        {
+            "id": "e779be32-a7a1-456d-9ad3-aba869b5fbd3",
+            "value": {
+                "type": "exact",
+                "value": {"id": user_id, "table": "notion_user"},
             },
-            { 
-                "filter":{ 
-                    "value":{ 
-                        "type":"exact",
-                        "value":False
+            "operator": "person_contains",
+            "property": "L}(O",
+            "value_type": "person",
+        },
+        {
+            "id": "b6963c9a-4350-4cfc-92b7-27a4ad2c08e8",
+            "type": "checkbox",
+            "value": {"type": "exact", "value": False},
+            "property": "X*]x",
+            "comparator": "checkbox_is",
+        },
+    ]
+
+    filter_params = (
+        {
+            "filters": [
+                {
+                    "filter": {
+                        "value": {
+                            "type": "exact",
+                            "value": {"id": user_id, "table": "notion_user"},
+                        },
+                        "operator": "person_contains",
                     },
-                    "operator":"checkbox_is"
+                    "property": "L}(O",
                 },
-                "property":"X*]x"
-            }
-        ],
-        "operator":"and"
-    },
+                {
+                    "filter": {
+                        "value": {"type": "exact", "value": False},
+                        "operator": "checkbox_is",
+                    },
+                    "property": "X*]x",
+                },
+            ],
+            "operator": "and",
+        },
+    )
 
     return list(cv.build_query(filter=filter_params).execute())
 
 
 def string_format(active_tasks):
     # if a task is unfinished, return a seedling icon
-    unfinished = lambda x: '' if len(x.Status)==1 and x.Status[0] == 'done yesterday' else ':seedling:'
+    unfinished = (
+        lambda x: ""
+        if len(x.Status) == 1 and x.Status[0] == "done yesterday"
+        else ":seedling:"
+    )
     # if a task is unpredicted, return a baby icon
-    unpredicted = lambda x: ':baby:' if 'unplanned' in x.Tags else ''
+    unpredicted = lambda x: ":baby:" if "unplanned" in x.Tags else ""
     # initialise strings
-    in_progress = ''
-    done_yesterday = ''
+    in_progress = ""
+    done_yesterday = ""
     # stringformat every task and add it to the overview strings
     for x in active_tasks:
         url = f'https://www.notion.so/mycellhub/{x.id.replace("-", "")}'
-        if 'in progress' in x.Status:
-            in_progress += f'• <{url}|{x.title}> {unpredicted(x)}\n'
+        if "in progress" in x.Status:
+            in_progress += f"• <{url}|{x.title}> {unpredicted(x)}\n"
 
-        if 'done yesterday' in x.Status:
-            done_yesterday += f'• <{url}|{x.title}> {unfinished(x)}{unpredicted(x)}\n'
+        if "done yesterday" in x.Status:
+            done_yesterday += f"• <{url}|{x.title}> {unfinished(x)}{unpredicted(x)}\n"
     return in_progress, done_yesterday
 
 
 def message_to_slack_blocks(done_yesterday, in_progress):
-    return  [{
-                "type": "section",
-                "text": {
+    return [
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*YESTERDAY:*\n{done_yesterday}"},
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*TODAY:*\n{in_progress}"},
+        },
+        {"type": "divider"},
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "text": "*Daily Update*  |  _ A :notion: integration_",
                     "type": "mrkdwn",
-                    "text": f"*YESTERDAY:*\n{done_yesterday}"
-                },
-            },{
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*TODAY:*\n{in_progress}"
-                },
-
-            },{
-                "type": "divider"
-            },{
-                "type": "context",
-                "elements": [{
-                                "text": "*Daily Update*  |  _:notion: integration created by Thomas Pinna_",
-                                "type": "mrkdwn"
-                            }]
-            }]
+                }
+            ],
+        },
+    ]
 
 
-def push_blocks_to_slack(channel, blocks): 
-    #push tasks to slack
-    client = slack.WebClient(token=os.environ['slack_key'])
+def push_blocks_to_slack(slack_key, channel, blocks):
+    # push tasks to slack
+    client = slack.WebClient(token=slack_key)
 
-    response = client.chat_postMessage(
-        channel=channel,
-        blocks=blocks,
-        as_user = True
-    )
+    client.chat_postMessage(channel=f"#{channel}", blocks=blocks, as_user=True)
 
 
 if __name__ == "__main__":
-    main_process(
-        user_id='41d1a012-7c6f-49a3-8e80-acdcddb3c92b',
-        channel='#daily_updates'
-        )
+    main_process()
