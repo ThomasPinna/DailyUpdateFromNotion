@@ -169,25 +169,6 @@ def connect_with_notion(notion_key, notion_table):
 
 
 def query_active_tasks_assigned_to(cv, user_id):
-    old_filter_params = [
-        {
-            "id": "e779be32-a7a1-456d-9ad3-aba869b5fbd3",
-            "value": {
-                "type": "exact",
-                "value": {"id": user_id, "table": "notion_user"},
-            },
-            "operator": "person_contains",
-            "property": "L}(O",
-            "value_type": "person",
-        },
-        {
-            "id": "b6963c9a-4350-4cfc-92b7-27a4ad2c08e8",
-            "type": "checkbox",
-            "value": {"type": "exact", "value": False},
-            "property": "X*]x",
-            "comparator": "checkbox_is",
-        },
-    ]
 
     filter_params = (
         {
@@ -213,8 +194,12 @@ def query_active_tasks_assigned_to(cv, user_id):
             "operator": "and",
         },
     )
+    result = list(cv.build_query(filter=filter_params).execute())
 
-    return list(cv.build_query(filter=filter_params).execute())
+    # workaround
+    result = [x for x in result if x.assigned_to[0].full_name == "Thomas Pinna"]
+
+    return result
 
 
 def string_format(active_tasks):
@@ -231,6 +216,7 @@ def string_format(active_tasks):
     done_yesterday = ""
     # stringformat every task and add it to the overview strings
     for x in active_tasks:
+        print(x.assigned_to[0].full_name)
         url = f'https://www.notion.so/mycellhub/{x.id.replace("-", "")}'
         if "in progress" in x.Status:
             in_progress += f"• <{url}|{x.title}> {unpredicted(x)}\n"
